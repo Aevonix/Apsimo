@@ -604,7 +604,9 @@ class SourceClaimProjection:
         remains recallable. This transient hint never changes stored history.
         """
         from pacomind.turns.idempotency import canonical_turn_digest, source_message_hash
-        if message.get('role') != 'assistant' or source['scope'] != 'person':
+        from pacomind.self_model.task_assessments import quotation_metadata
+        if (message.get('role') != 'assistant' or source['scope'] != 'person'
+                or quotation_metadata(message)):
             return False
         refs = message.get('_supplied_inputs')
         if refs is not None:
@@ -662,6 +664,7 @@ class SourceClaimProjection:
         """
         from pacomind.turns.idempotency import source_message_hash
         from pacomind.turns.audio import source_text, evidence_metadata
+        from pacomind.self_model.task_assessments import quotation_metadata
         from pacomind.memory.recall import source_candidates, pair_conversation_candidates
         source_hits = list(source_hits)
         input_pairs = {}
@@ -743,6 +746,7 @@ class SourceClaimProjection:
         for original in source_hits:
             hit = dict(original)
             hit.pop('_current_work_status_reply', None)
+            hit.pop('assessment_context', None)
             source = sources.get(hit["turn_id"])
             removed = []
             if source:
@@ -765,6 +769,10 @@ class SourceClaimProjection:
                     # every matching chunk occurrence; never depend on an entire
                     # corrected quotation fitting inside one retrieved chunk.
                     offset = text.find(hit["content"])
+                    if offset >= 0:
+                        # The canonical admission marker owns this relation;
+                        # index hints and words inside a quote cannot mint it.
+                        hit.update(quotation_metadata(message))
                     if offset >= 0 and hit["content"] != text:
                         hit["excerpt_truncated"] = True
                     while offset >= 0:
