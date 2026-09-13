@@ -6,6 +6,7 @@ from contextlib import closing
 import hashlib
 import json
 import logging
+import re
 import time
 import uuid
 
@@ -138,21 +139,33 @@ class SourceClaimProjection:
         self.ledger = ledger
 
     def deadline(self, *, contact_id, session_id, source_id, source_version, claim_id,
-                 timezone_name="UTC"):
+                 timezone_name="UTC", timezone_basis="caller_override"):
         """Resolve an explicitly selected claim's value, without creating work.
 
         The original source stays pinned even after a correction. A changed
         source, missing correction or annotation must not revive an old date.
         All eligibility, successor and value reads share one SQLite snapshot.
         """
-        from .source_time import source_event_time
+        from .source_time import source_deadline_time
         from pacomind.turns.idempotency import canonical_turn_digest
 
         original = {"original_source_ref": {"source_id": source_id, "source_version": source_version},
-                    "original_claim_id": claim_id}
+                    "original_claim_id": claim_id, "timezone_name": timezone_name,
+                    "timezone_basis": timezone_basis}
 
         def unavailable(reason):
             return {**original, "status": "unavailable", "reason": reason}
+
+        def expression(claim):
+            # Extraction may retain the clock as value and its complete date
+            # in event_time. Use that exact quoted operand only when it also
+            # contains this claim's value; another event's date is not a join.
+            value = claim['value']
+            event = claim.get('event_time', {}).get('expression')
+            if (isinstance(event, str) and event in claim['evidence']
+                    and re.search(r'(?<!\w)' + re.escape(value) + r'(?!\w)', event)):
+                return event
+            return value
 
         with closing(self.ledger._connect()) as conn:
             conn.execute("BEGIN")
@@ -248,10 +261,10 @@ class SourceClaimProjection:
             peers = self._rows(conn, contact_id, session_id,
                                key=(current['subject_key'], current['predicate']), limit=257)
             if any(not row['superseded_by'] and not row['retracted_by'] and eligible(row)
-                   and norm_value(row['value']) != norm_value(current['value']) for row in peers):
+                   and norm_value(expression(row)) != norm_value(expression(current)) for row in peers):
                 return {**result, "status": "unresolved", "reason": "conflicting_claims"}
-            deadline = source_event_time(current['value'], observed_at=current['observed_at'],
-                                         timezone_name=timezone_name)
+            deadline = source_deadline_time(expression(current), observed_at=current['observed_at'],
+                                            timezone_name=timezone_name, evidence=current['evidence'])
             result['deadline_time'] = deadline
             if deadline.get('status') != 'resolved' or deadline.get('precision') != 'instant':
                 return {**result, "status": "unresolved", "reason": "deadline_not_instant"}

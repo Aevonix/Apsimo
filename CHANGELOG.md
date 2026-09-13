@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.5.16 - complete deadline expressions and local clocks
+
+Reminders now use the complete event expression retained with a memory claim.
+A clock stored as `9:30am` can therefore keep its quoted `Monday morning` date
+context. Relative deadlines use the source report time and show the timezone
+and interpretation rule. Conflicting dates remain unresolved.
+
+When Hermes has no timezone setting, the reminder uses the existing contact or
+agent communication timezone instead of silently choosing UTC. It keeps the
+selected timezone with the native cron job. Explicit timezone settings still
+take precedence.
+
 ## v1.5.15 - task reviews as learning evidence
 
 An execution host can submit a retained review of a completed operational task
