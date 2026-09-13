@@ -350,7 +350,7 @@ _ACTION_INTENT_TOOL_NAMES: tuple[str, ...] = tuple(
 )
 
 _OWNER_MESSAGE_TOOL_NAMES: tuple[str, ...] = ("pacomind_send_message",)
-_COORDINATION_TOOL_NAMES = ('pacomind_accept_local_draft', 'pacomind_commitment_work', 'pacomind_contacts', 'pacomind_followup', 'pacomind_read_work_source', 'pacomind_judgments', 'pacomind_memory_forget', 'pacomind_memory_annotate', 'pacomind_memory_retain_observation', 'pacomind_memory_read_source', 'pacomind_work_initiative', 'pacomind_task')
+_COORDINATION_TOOL_NAMES = ('pacomind_accept_local_draft', 'pacomind_commitment_work', 'pacomind_contacts', 'pacomind_followup', 'pacomind_reminder', 'pacomind_read_work_source', 'pacomind_judgments', 'pacomind_memory_forget', 'pacomind_memory_annotate', 'pacomind_memory_retain_observation', 'pacomind_memory_read_source', 'pacomind_work_initiative', 'pacomind_task')
 
 # No event can be injected until PacoMind exposes an exact viewer-attested event
 # projection.  An empty catalog is an intentional security and attribution
@@ -2363,8 +2363,9 @@ def register(ctx: Any) -> None:
     turn_writer_platforms = boundary.turn_writer_platforms
     turn_outbox = boundary.turn_outbox
     request_memory = RequestMemory(client, turn_outbox)
-    native_reminders = NativeReminders(client, owner_contact_id, request_memory)
-    reminders_available = native_reminders.available()
+    reminders_available = NativeReminders.available()
+    native_reminders = (NativeReminders(client, owner_contact_id, request_memory)
+                        if reminders_available else None)
     from .native_owned_copies import NativeOwnedCopies
     native_owned = NativeOwnedCopies(request_memory, _TRANSPORT_SCOPES)
     request_memory.ownership = native_owned
