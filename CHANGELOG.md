@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.5.16 - complete deadline expressions and local clocks
+## v1.5.16 - corrected deadlines and clearer memory sources
 
 Reminders now use the complete event expression retained with a memory claim.
 A clock stored as `9:30am` can therefore keep its quoted `Monday morning` date
@@ -11,6 +11,14 @@ When Hermes has no timezone setting, the reminder uses the existing contact or
 agent communication timezone instead of silently choosing UTC. It keeps the
 selected timezone with the native cron job. Explicit timezone settings still
 take precedence.
+
+Recalled items now distinguish their display labels from canonical source IDs.
+Search and forget tools identify the source IDs to use, and a rejected forget
+request explicitly reports that it removed nothing.
+
+Excerpts from task reviews retain their machine-assessment attribution. A quoted
+artifact inside a review is not itself the review's conclusion. This improves
+the evidence presented to a model; useful decisions still require validation.
 
 ## v1.5.15 - task reviews as learning evidence
 
