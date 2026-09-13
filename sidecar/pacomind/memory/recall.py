@@ -117,7 +117,9 @@ def render_memory_context(memories: list[dict[str, Any]]) -> str:
     """
     lines, passages, passage_ids = [], [], {}
     for memory in memories:
-        source = {"id": str(memory.get("id") or ""),
+        # Candidate IDs identify rendered items, never canonical source selectors.
+        # Keep the internal identity for ranking/deduplication unchanged.
+        source = {"display_id": str(memory.get("id") or ""),
                   "kind": memory.get("kind", "belief"),
                   "source": str(memory.get("source_uri") or ""),
                   "state": str(memory.get("epistemic_state") or "inferred")}
