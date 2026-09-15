@@ -1,9 +1,9 @@
 # PacoMind
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/branding/pacomind-primary-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/branding/pacomind-primary-light.svg">
-  <img alt="PacoMind" src="docs/branding/pacomind-primary-light.svg" width="440">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/branding/protagine-primary-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/branding/protagine-primary-light.svg">
+  <img alt="Protagine — Proto AGI Engine" src="docs/branding/protagine-primary-light.svg" width="440">
 </picture>
 
 **PACO: Persistent Autonomous Cognitive Orchestration**
