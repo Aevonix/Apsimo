@@ -110,6 +110,8 @@ from protagine.api.schemas.host import (
     MemoryReadResponse,
     MemorySearchRequest,
     MemorySearchResponse,
+    MemoryRecentRequest,
+    MemoryRecentResponse,
     RerankRequest,
     RerankResponse,
     RerankResult,
@@ -1286,6 +1288,25 @@ async def memory_search(body: MemorySearchRequest, request: Request) -> MemorySe
             "code": "memory_backend_unavailable",
             "message": "Canonical memory could not be read or selected",
         }) from None
+
+
+@router.post('/memory/recent', response_model=MemoryRecentResponse)
+async def memory_recent(body: MemoryRecentRequest, request: Request) -> MemoryRecentResponse:
+    """Read the caller's latest recorded conversation without semantic ranking."""
+    person = resolve_request_person(request, claimed_person_id=body.person_id)
+    _p8_viewer_for_request(request, person)
+    from protagine.turns import get_turn_idempotency_ledger
+    from protagine.memory.recent import read_recent
+    try:
+        ledger = get_turn_idempotency_ledger(get_state_dir())
+        return MemoryRecentResponse(**read_recent(ledger, contact_id=person,
+            session_id=body.session_id, platform=body.platform, limit=body.limit,
+            comms_log=_comms_log))
+    except Exception as exc:
+        logger.warning('Recent canonical conversation unavailable (%s)', type(exc).__name__)
+        raise HTTPException(status_code=503, detail={
+            'code': 'memory_backend_unavailable',
+            'message': 'Recent canonical conversation could not be read'}) from None
 
 
 @router.post("/memory/embed", response_model=MemoryEmbedResponse)
@@ -3599,6 +3620,7 @@ async def _ingest_turn_idempotently(
                     for message in body.checkpoint_messages],
                 occurred_at=(body.context.metadata or {}).get("occurred_at"),
                 timezone_name=body.context.timezone,
+                channel_id=body.context.channel_id,
             )
         except ValueError as exc:
             from protagine.turns.idempotency import SourceErased
@@ -3896,10 +3918,6 @@ async def _process_turn_sync(
     body.context.channel_id = await _ensure_channel_id(
         body.context, identity=body.identity,
     )
-    # Keep the channel registry alive from real traffic: first sighting
-    # auto-registers, every turn refreshes last_seen_at (channel health).
-    _observe_channel(body.context.channel_id)
-
     # ── Attribution chokepoint (docs/RELATIONSHIPS.md) ──────────────────
     # Resolve WHO said this server-side. A supplied sender overrides the
     # client's contact_id (which goes stale in group sessions); a senderless
@@ -3949,6 +3967,13 @@ async def _process_turn_sync(
     except Exception:
         logger.debug("participant attribution failed; keeping client contact",
                      exc_info=True)
+    if not source_body.context.channel_id and _resolved_human_sender and body.sender is not None:
+        # A stale claimed contact can have another platform's primary handle.
+        # The resolved sender establishes the fallback conversation platform;
+        # explicit conversation keys (including derived work) stay unchanged.
+        body.context.channel_id = f'{body.sender.platform.strip().lower()}:{body.context.contact_id}'
+    # Observe only the final attributed channel, never a stale fallback.
+    _observe_channel(body.context.channel_id)
     _is_system_turn = body.context.contact_id == "system"
 
     # Persist complete attributed messages before derived graph/mining effects.
@@ -3972,6 +3997,7 @@ async def _process_turn_sync(
                 occurred_at=(body.context.metadata or {}).get("occurred_at"),
                 timezone_name=body.context.timezone,
                 derive_claims=not getattr(getattr(request, 'state', None), 'task_instruction_only', False),
+                channel_id=body.context.channel_id,
             )
         except SourceErased:
             return TurnSyncResponse(accepted=False, continuity_updated=False, skipped_reason="source_erased")

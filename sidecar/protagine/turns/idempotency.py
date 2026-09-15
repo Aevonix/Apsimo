@@ -195,6 +195,8 @@ class TurnIdempotencyLedger:
                 initialize_attribution(conn)
                 from protagine.turns.source_annotations import initialize as initialize_annotations
                 initialize_annotations(conn)
+                from protagine.turns.source_channels import initialize as initialize_channels
+                initialize_channels(conn)
             self._initialized = True
 
     def append_source_annotation(self, **kwargs):
@@ -209,6 +211,7 @@ class TurnIdempotencyLedger:
         timezone_name: str | None = None,
         derive_claims: bool = True,
         runtime_judgment: bool = False,
+        channel_id: str | None = None,
     ) -> bool:
         """Atomically retain source JSON and its rebuildable lexical index.
 
@@ -273,10 +276,14 @@ class TurnIdempotencyLedger:
             if not messages:
                 raise SourceErased("source contains only erased messages")
             encoded = json.dumps(messages, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False)
-            row = conn.execute("SELECT content_sha256 FROM turn_sources WHERE turn_id=?", (turn_id,)).fetchone()
+            row = conn.execute("SELECT content_sha256,contact_id FROM turn_sources WHERE turn_id=?", (turn_id,)).fetchone()
             if row:
                 if row[0] != digest:
                     raise ValueError("source id already contains different evidence")
+                from .source_channels import record as record_channel
+                # Exact replay must preserve a subsequent reviewed owner correction.
+                record_channel(conn, turn_id=turn_id, contact_id=row[1],
+                    messages=messages, occurred_at=occurred_at, channel_id=channel_id)
                 return False
             from protagine.turns.media import normalize_messages, SourceMedia
             messages = normalize_messages(conn, SourceMedia(self).store, turn_id, session_id, messages)
@@ -287,6 +294,9 @@ class TurnIdempotencyLedger:
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (turn_id, digest, contact_id, session_id, scope, encoded, occurred_at),
             )
+            from .source_channels import record as record_channel
+            record_channel(conn, turn_id=turn_id, contact_id=contact_id,
+                messages=messages, occurred_at=occurred_at, channel_id=channel_id)
             self._index_messages(conn, turn_id, messages)
             from protagine.beliefs.source_projection import enqueue
             if derive_claims:
